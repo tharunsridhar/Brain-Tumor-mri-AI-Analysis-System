@@ -1118,7 +1118,7 @@ for i in range(30):
     print(f"  ...{i*2}s")
 
 # Connect ngrok
-ngrok.set_auth_token("358HfFSjXSmlojBiorl4mNse6xs_MJS8wgAkf3qAxFhZUVnY")
+ngrok.set_auth_token("")
 url = ngrok.connect(8501)
 print(f"\n🚀 Live at: {url}")
 
