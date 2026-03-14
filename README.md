@@ -331,5 +331,5 @@ Generated PDF examples are available in the repo:
 This project is intended for academic, portfolio, and research demonstration purposes only. Any generated analysis or report must be reviewed by a qualified medical professional before clinical use.
 
 ## Author
-
+THARUN SRIDHAR NATARAJAN
 Built as an applied AI project focused on medical image analysis, interpretability, and report generation for brain MRI workflows.
