@@ -19,7 +19,7 @@ Key highlights:
 
 - Classifies MRI scans into `glioma`, `meningioma`, `pituitary`, and `no_tumor`
 - Uses an EfficientNetV2-S based classifier for high-resolution image understanding
-- Uses a U-Net style segmentation model to localize tumor regions
+- Uses a residual U-Net style segmentation model to localize tumor regions
 - Generates Grad-CAM heatmaps for model interpretability
 - Estimates tumor area, diameter, volume, bounding box, mass effect, and risk score
 - Produces AI-assisted radiology summaries and downloadable PDF reports
@@ -42,6 +42,42 @@ Key highlights:
 ### Sample Testing Output
 
 ![Testing output](results/v2s%20testing.png)
+
+### Segmentation Training Curve
+
+![Segmentation dice curve](results/download%20(1).png)
+
+## Performance Snapshot
+
+### Classification Results
+
+Based on the saved classification report in the repository, the EfficientNetV2-S classifier reaches:
+
+- Overall accuracy: `0.98`
+- Macro average precision: `0.98`
+- Macro average recall: `0.98`
+- Macro average F1-score: `0.98`
+- Evaluation support: `2180` MRI images
+
+Per-class performance:
+
+| Class | Precision | Recall | F1-score | Support |
+| --- | --- | --- | --- | --- |
+| Glioma | 0.98 | 0.96 | 0.97 | 750 |
+| Meningioma | 0.96 | 0.96 | 0.96 | 518 |
+| No Tumor | 0.98 | 1.00 | 0.99 | 455 |
+| Pituitary | 0.98 | 1.00 | 0.99 | 457 |
+
+### Segmentation Results
+
+The segmentation pipeline is trained and evaluated with the Dice coefficient as the primary metric.
+
+- Input resolution: `256 x 256`
+- Loss: `binary cross-entropy + Dice loss`
+- Evaluation metric: `Dice coefficient`
+- Saved training curve shows validation Dice stabilizing around the `0.60+` range, with training Dice reaching the high `0.80+` range
+
+This gives the project both a classification component for tumor type prediction and a segmentation component for tumor localization and downstream measurement.
 
 ## System Pipeline
 
@@ -88,7 +124,17 @@ Classification labels:
 
 ### Segmentation
 
-The segmentation pipeline is built around a U-Net style architecture operating on `256 x 256` MRI slices, with preprocessing and filtering focused on tumor-positive masks.
+The segmentation pipeline is built around a residual U-Net style architecture operating on `256 x 256` grayscale MRI slices.
+
+Segmentation workflow details:
+
+- tumor-positive masks are filtered before training
+- MRI slices are resized and normalized
+- CLAHE is applied to enhance grayscale contrast
+- masks are binarized for pixel-wise prediction
+- augmentation includes flips and 90-degree rotations
+- optimization uses a combined BCE + Dice objective
+- model quality is tracked with Dice score on validation and test data
 
 ### Reporting Layer
 
@@ -148,6 +194,14 @@ Predicts one of four diagnostic categories from brain MRI images.
 ### 2. Tumor Segmentation
 
 Extracts the suspected tumor region for downstream measurement and visualization.
+
+The segmentation stage supports:
+
+- binary tumor mask generation
+- localization for heatmap and overlay creation
+- shape and boundary analysis
+- tumor size and approximate volume estimation
+- downstream clinical analytics such as laterality and mass-effect style features
 
 ### 3. Explainable AI
 
@@ -231,6 +285,7 @@ This repository currently contains exported notebook-style Python scripts from t
 - Several scripts were exported from Google Colab and still contain Colab-specific path assumptions.
 - Model files referenced by the scripts are expected to exist in external storage paths and are not included in this repo.
 - The deployment prototype is best treated as a showcase and integration layer built on top of the trained models.
+- The repository preserves the full project workflow, including classification research, segmentation research, reporting logic, and deployment code.
 - This project is for educational and research purposes and is not a medical device.
 
 ## Example Outputs
