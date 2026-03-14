@@ -33,7 +33,7 @@ Key highlights:
 
 ### Confusion Matrix
 
-![Confusion matrix](results/v2s%20confustion%20matrix.png)
+![Confusion matrix](results/v2s%20confusion%20matrix.png)
 
 ### Training Curves
 
@@ -45,7 +45,7 @@ Key highlights:
 
 ### Segmentation Training Curve
 
-![Segmentation dice curve](results/download%20(1).png)
+![Segmentation dice curve](results/segmentation%20dice%20curve.png)
 
 ## Performance Snapshot
 
@@ -163,7 +163,7 @@ Brain-Tumor-mri-AI-Analysis-System/
 |   |
 |   +-- segmentation/
 |   |   +-- segmentation_brain_seg_final.py
-|   |   +-- segmentaion_dataset.py
+|   |   +-- segmentation_dataset.py
 |   |
 |   +-- reporting/
 |   |   +-- reporting.py
@@ -280,9 +280,32 @@ This repository currently contains exported notebook-style Python scripts from t
 - adapt the paths to local datasets and model files
 - use `deployment/app.py` as the starting point for the interactive demo flow
 
+### Suggested Entry Points
+
+Use these files depending on what you want to demonstrate:
+
+- `src/classification/classification_model_efficientnet_v2_s.py` for the main classification training pipeline
+- `src/classification/classification_testing.py` for manual classification checks across saved models
+- `src/segmentation/segmentation_brain_seg_final.py` for tumor segmentation training and Dice-based evaluation
+- `src/reporting/reporting.py` for report generation logic
+- `deployment/app.py` for the full showcase pipeline with classification, segmentation, explainability, analytics, and reporting
+
+### Model Weights Note
+
+The trained model files are not stored in this GitHub repository.
+
+The code expects external model artifacts such as:
+
+- classification model weights in `.keras` or `.h5` format
+- segmentation model weights in `.keras` format
+- local or Drive-based dataset folders that match the paths used in the scripts
+
+If you want to run the full pipeline locally, update the dataset paths and model paths in the scripts to match your machine.
+
 ## Technical Notes
 
 - Several scripts were exported from Google Colab and still contain Colab-specific path assumptions.
+- Colab-specific parts include `drive.mount(...)`, `!pip install ...`, and `/content/drive/...` file paths.
 - Model files referenced by the scripts are expected to exist in external storage paths and are not included in this repo.
 - The deployment prototype is best treated as a showcase and integration layer built on top of the trained models.
 - The repository preserves the full project workflow, including classification research, segmentation research, reporting logic, and deployment code.
