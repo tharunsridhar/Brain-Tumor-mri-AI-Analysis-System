@@ -7,14 +7,13 @@ Original file is located at
     https://colab.research.google.com/drive/10RgFdjitDdyhg9IYnqtCioTk3Dk2um0i
 """
 
-!pip install groq fpdf2 pillow -q
+!pip install groq fpdf2 pillow python-dotenv -q
 
 from google.colab import drive
 drive.mount('/content/drive')
 
-GROQ_API_KEY     = ""  # <-- paste your key here
-
 import os, warnings, time, re
+from pathlib import Path
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.filterwarnings('ignore')
 
@@ -24,9 +23,12 @@ tf.autograph.set_verbosity(0)
 import matplotlib.pyplot as plt
 from tensorflow.keras.applications.efficientnet_v2 import preprocess_input as effv2_prep
 from datetime import datetime
+from dotenv import load_dotenv
 from fpdf import FPDF
 import base64
 from groq import Groq
+
+load_dotenv(Path.cwd() / ".env")
 
 # ════════════════════════════════════════════════════
 # CONFIG
@@ -50,7 +52,14 @@ MRI_PARAMS = {
     "voxel_size":      "0.5 x 0.5 x 5.0 mm",
 }
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+
+def get_groq_client():
+    if not GROQ_API_KEY:
+        raise RuntimeError("Missing GROQ_API_KEY. Add it to your .env file before running reporting.py.")
+    return Groq(api_key=GROQ_API_KEY)
+
+groq_client = get_groq_client()
 
 # ════════════════════════════════════════════════════
 # MODELS

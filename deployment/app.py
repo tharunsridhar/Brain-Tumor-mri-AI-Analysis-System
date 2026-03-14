@@ -14,6 +14,7 @@ drive.mount('/content/drive')
 
 # -*- coding: utf-8 -*-
 import os, warnings, re, base64, json, tempfile
+from pathlib import Path
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.filterwarnings('ignore')
 
@@ -30,8 +31,11 @@ import matplotlib.patches as mpatches
 
 import streamlit as st
 from datetime import datetime
+from dotenv import load_dotenv
 from fpdf import FPDF
 from groq import Groq
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # ════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -117,7 +121,7 @@ REPORT_DIR       = BASE_DIR + "/Reports"
 HISTORY_FILE     = BASE_DIR + "/case_history.json"
 os.makedirs(REPORT_DIR, exist_ok=True)
 
-GROQ_API_KEY     = ""
+GROQ_API_KEY     = os.getenv("GROQ_API_KEY", "").strip()
 
 IMG_SIZE         = 384
 SEG_SIZE         = 256
@@ -308,9 +312,14 @@ def clean_llm_text(text):
     text = re.sub(r'`(.*?)`', r'\1', text)
     return safe(text)
 
+def get_groq_client():
+    if not GROQ_API_KEY:
+        raise RuntimeError("Missing GROQ_API_KEY. Add it to the project .env file.")
+    return Groq(api_key=GROQ_API_KEY)
+
 def generate_llm_report(image_path, label, confidence, size_info, shape_info,
                          mass_info, risk_info, severity, recommendation, rano):
-    groq_client = Groq(api_key=GROQ_API_KEY)
+    groq_client = get_groq_client()
     with open(image_path, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode("utf-8")
     bbox_t  = f"{size_info['bbox']['width_cm']} cm x {size_info['bbox']['height_cm']} cm" if size_info['bbox'] else "N/A"
@@ -351,7 +360,7 @@ STRICT RULES:
 
 def generate_normal_llm_report(image_path, confidence):
     """Generate a clean normal brain MRI report when no tumor is detected."""
-    groq_client = Groq(api_key=GROQ_API_KEY)
+    groq_client = get_groq_client()
     with open(image_path, "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode("utf-8")
     prompt = f"""You are an expert radiologist AI assistant.

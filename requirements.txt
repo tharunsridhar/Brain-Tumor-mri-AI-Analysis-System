@@ -12,3 +12,4 @@ pillow
 streamlit
 tqdm
 imagehash
+python-dotenv
