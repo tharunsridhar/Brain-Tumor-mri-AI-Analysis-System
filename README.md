@@ -332,4 +332,5 @@ This project is intended for academic, portfolio, and research demonstration pur
 
 ## Author
 THARUN SRIDHAR NATARAJAN
+
 Built as an applied AI project focused on medical image analysis, interpretability, and report generation for brain MRI workflows.
