@@ -1,0 +1,2 @@
+﻿"""NeuroScan AI application package."""
+
