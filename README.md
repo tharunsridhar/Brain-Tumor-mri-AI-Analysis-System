@@ -1,59 +1,80 @@
 # Project 1
 
-Project 1 is a lightweight brain MRI analysis application built with Streamlit. It is organized as a clean runtime package with app code, reusable source modules, demo images, model guidance, generated reports, and supporting documents.
+Project 1 is a streamlined brain MRI analysis application built with Streamlit. It is designed as a lightweight, runnable project that combines modular image analysis, tumor-focused feature extraction, explainability support, risk-oriented assessment, and structured reporting in a clean folder layout.
 
-## What It Does
+The repository has been cleaned to keep the runtime code focused and easy to understand. It is ready for local execution in its current lightweight form, and it can also be extended later with real trained classification and segmentation models.
 
-- uploads a brain MRI image through a Streamlit interface
-- runs classification-style analysis and segmentation-style localization
-- generates explainability output and tumor-related measurements
-- computes risk-oriented summary information
-- produces a structured report for review
+## Overview
+
+This project is built to:
+
+- upload and analyze brain MRI images through a Streamlit interface
+- run classification-style prediction and segmentation-style localization
+- generate explainability-oriented visual outputs
+- estimate tumor-related measurements such as area, diameter, and volume
+- compute risk-oriented summary information
+- produce a structured report for review
 
 ## Project Structure
 
 ```text
 Project 1/
-│
-├── app/                         # Production app (ONLY runnable code)
-│   ├── main.py                  # Streamlit application entrypoint
-│   ├── pipeline/
-│   │   ├── classification.py
-│   │   ├── segmentation.py
-│   │   ├── explainability.py
-│   │   ├── report.py
-│   │   └── utils.py
-│   └── config.py
-│
-├── models/                      # Model notes and future model location guidance
-│   └── README.md
-│
-├── data/
-│   ├── sample/                  # Demo MRI images for quick local testing
-│   └── README.md
-│
-├── src/                         # Feature engineering and reusable logic
-│   ├── features/
-│   │   ├── scan_quality.py
-│   │   ├── tumor_size.py
-│   │   ├── risk_scoring.py
-│   │   └── ...
-│   └── fusion/
-│       └── multi_model.py
-│
-├── reports/                     # Generated outputs such as case history and report PDFs
-│   └── case_history.json
-│
-├── docs/                        # Graphs, PDFs, images, and supporting reference material
-│
-├── requirements.txt
-├── README.md
-└── LICENSE
+|
+|-- app/                         # Production app (ONLY runnable code)
+|   |-- main.py                  # Streamlit application entrypoint
+|   |-- pipeline/
+|   |   |-- classification.py    # Classification pipeline logic
+|   |   |-- segmentation.py      # Segmentation-style processing logic
+|   |   |-- explainability.py    # Explainability and heatmap generation
+|   |   |-- report.py            # Structured report builder
+|   |   `-- utils.py             # Shared pipeline helpers
+|   `-- config.py                # Centralized runtime paths and settings
+|
+|-- models/                      # Model guidance only; heavy weights are not stored here
+|   `-- README.md
+|
+|-- data/
+|   |-- sample/                  # Demo MRI images for quick local testing
+|   `-- README.md
+|
+|-- src/                         # Reusable source logic used by the app
+|   |-- features/
+|   |   |-- scan_quality.py
+|   |   |-- tumor_size.py
+|   |   |-- risk_scoring.py
+|   |   |-- shape_irregularity.py
+|   |   |-- explainability_overlap.py
+|   |   |-- prior_case_comparison.py
+|   |   |-- structured_report.py
+|   |   |-- history_dashboard.py
+|   |   |-- decision_logic.py
+|   |   `-- _common.py
+|   `-- fusion/
+|       `-- multi_model.py
+|
+|-- reports/                     # Generated outputs such as case history and sample reports
+|   `-- case_history.json
+|
+|-- docs/                        # Supporting PDFs, graphs, images, and reference material
+|
+|-- requirements.txt            # Runtime dependencies
+`-- README.md                   # Project documentation
 ```
+
+## How The Pipeline Works
+
+The application follows a simple analysis flow:
+
+1. A brain MRI image is uploaded through the Streamlit interface.
+2. The image is processed by the classification module.
+3. A segmentation-style mask is generated for localization.
+4. Explainability output is created for visual interpretation.
+5. Tumor metrics and risk-related summaries are computed.
+6. A structured text report is generated for review.
 
 ## Requirements
 
-Install the project dependencies with:
+Install the dependencies from the project root:
 
 ```bash
 pip install -r requirements.txt
@@ -69,28 +90,31 @@ streamlit
 
 ## How To Run
 
-From the project root, start the app with:
+Start the Streamlit app from the project root with:
 
 ```bash
 streamlit run app/main.py
 ```
 
-Then open the local Streamlit URL shown in the terminal and upload an MRI image to run the pipeline.
+After running the command, open the local Streamlit URL shown in the terminal, upload an MRI image, and run the analysis from the web interface.
 
 ## Models
 
-Heavy trained model files are intentionally not included in this repository. When you want to connect real models, place them under:
+Heavy trained model files are intentionally not included in this repository.
+
+If you want to connect real model weights later, create and use:
 
 - `models/Classification/`
 - `models/Segmentation/`
 
-The default runtime paths are managed in `app/config.py`.
+The default model-related paths are managed in `app/config.py`.
 
 ## Notes
 
-- the current project is runnable without heavy models because it uses lightweight fallback logic
-- supporting PDFs, graphs, and report files have been transferred into `docs/` and `reports/`
-- the repository is intentionally cleaned to keep only the files needed to run or extend the app
+- the current version is fully runnable in a lightweight form
+- the app uses fallback pipeline logic, so it can run even without heavy trained models
+- supporting reports, graphs, and reference materials are available in `reports/` and `docs/`
+- the repository has been cleaned to remove old duplicate code and keep only the relevant project files
 
 ## Author
 
