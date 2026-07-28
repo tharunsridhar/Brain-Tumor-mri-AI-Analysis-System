@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from importlib.util import find_spec
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,7 @@ from app.schemas import (
     ReadinessResponse,
     ReportsResponse,
 )
-from utils.config import CLASS_NAMES, IMG_SIZE, MRI_PARAMS, MODELS_DIR, REPORT_DIR, SEG_MODEL_PATH, SEG_SIZE
+from utils.config import CLASS_NAMES, IMG_SIZE, MRI_PARAMS, MODELS_DIR, OVERLAY_DIR, REPORT_DIR, SEG_MODEL_PATH, SEG_SIZE
 from utils.history_manager import load_history
 
 APP_NAME = "NeuroScan AI API"
@@ -92,6 +93,15 @@ def _missing_model_files() -> list[str]:
     return [str(path) for path in _model_files().values() if not Path(path).exists()]
 
 
+def _missing_runtime_dependencies() -> list[str]:
+    modules = {
+        "opencv-python-headless": "cv2",
+        "tensorflow": "tensorflow",
+        "fpdf2": "fpdf",
+    }
+    return [package for package, module in modules.items() if find_spec(module) is None]
+
+
 def _report_payload(path: Path) -> dict[str, Any]:
     stat = path.stat()
     return {
@@ -108,6 +118,15 @@ def _resolve_report(filename: str) -> Path:
     report_root = REPORT_DIR.resolve()
     if report_root not in path.parents or not path.exists() or path.suffix.lower() != ".pdf":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    return path
+
+
+def _resolve_overlay(filename: str) -> Path:
+    clean_name = Path(filename).name
+    path = (OVERLAY_DIR / clean_name).resolve()
+    overlay_root = OVERLAY_DIR.resolve()
+    if overlay_root not in path.parents or not path.exists() or path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Overlay image not found")
     return path
 
 
@@ -284,11 +303,65 @@ def _index_html() -> str:
           summary { cursor: pointer; padding: 12px 14px; color: var(--muted); font-weight: 700; }
           pre { margin: 0; padding: 0 14px 14px; overflow: auto; white-space: pre-wrap; color: #c9d6e6; font-size: 12px; line-height: 1.45; }
           .empty { color: var(--muted); padding: 34px 18px; text-align: center; border: 1px dashed #334052; border-radius: 8px; background: #0b1017; }
+          .preview {
+            margin-bottom: 14px;
+            border: 1px solid var(--line-soft);
+            border-radius: 8px;
+            background: #0b1017;
+            overflow: hidden;
+          }
+          .preview img {
+            display: block;
+            width: 100%;
+            max-height: 360px;
+            object-fit: contain;
+            background: #05070b;
+          }
+          .preview-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-top: 1px solid var(--line-soft);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+          }
+          .visual-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+          }
+          .visual-cell {
+            border: 1px solid var(--line-soft);
+            border-radius: 8px;
+            background: #0b1017;
+            overflow: hidden;
+          }
+          .visual-cell img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: contain;
+            background: #05070b;
+          }
+          .visual-cell span {
+            display: block;
+            padding: 6px 8px;
+            border-top: 1px solid var(--line-soft);
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            text-align: center;
+          }
           @media (max-width: 900px) {
             header { align-items: flex-start; flex-direction: column; }
             .nav { justify-content: flex-start; }
             .shell { grid-template-columns: 1fr; }
             .metrics, .summary { grid-template-columns: 1fr; }
+            .visual-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           }
         </style>
       </head>
@@ -308,7 +381,7 @@ def _index_html() -> str:
           </header>
 
           <section class="shell">
-            <form id="scan-form" class="panel">
+            <form id="scan-form" class="panel" action="/api/analyze" method="post" enctype="multipart/form-data" onsubmit="return false;">
               <div class="panel-head">
                 <h2>New Analysis</h2>
                 <a class="ghost" href="/api/model-info">Model Info</a>
@@ -321,7 +394,7 @@ def _index_html() -> str:
                 <input id="patient_id" name="patient_id" placeholder="Optional">
                 <label for="file">MRI Image</label>
                 <input id="file" name="file" type="file" accept=".png,.jpg,.jpeg,.bmp" required>
-                <button id="submit" type="submit">Run Analysis</button>
+                <button id="submit" type="button" onclick="window.NeuroScanRunAnalysis && window.NeuroScanRunAnalysis(event);">Run Analysis</button>
               </div>
             </form>
 
@@ -331,96 +404,187 @@ def _index_html() -> str:
                 <span class="ghost" id="result-state">No case loaded</span>
               </div>
               <div class="panel-body" id="result">
-                <div class="empty">Upload an MRI image and run analysis. The first request loads the model files and can take longer.</div>
+                <div class="empty">Upload an MRI image. The selected image preview will appear here immediately.</div>
               </div>
             </section>
           </section>
         </main>
         <script>
-          const form = document.getElementById("scan-form");
-          const result = document.getElementById("result");
-          const statusBox = document.getElementById("status");
-          const state = document.getElementById("result-state");
-          const submit = document.getElementById("submit");
-
-          function escapeHtml(value) {
-            return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-              "&": "&amp;",
-              "<": "&lt;",
-              ">": "&gt;",
-              "\"": "&quot;",
-              "'": "&#039;"
-            })[char]);
-          }
-
-          function setStatus(kind, text, detail = "") {
-            const cls = kind === "ok" ? "ok" : kind === "busy" ? "busy" : kind === "err" ? "err" : "";
-            statusBox.innerHTML = `<span><i class="dot ${cls}"></i>${escapeHtml(text)}</span><span>${escapeHtml(detail)}</span>`;
-          }
-
-          function metric(label, value, tone = "") {
-            return `<div class="metric ${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
-          }
-
-          function kv(label, value) {
-            return `<div class="kv"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "N/A")}</strong></div>`;
-          }
-
-          function renderResult(data) {
-            const confidence = typeof data.confidence === "number" ? `${(data.confidence * 100).toFixed(1)}%` : "N/A";
-            const severityTone = data.severity === "Severe" ? "bad" : data.severity === "Moderate" ? "warn" : "ok";
-            const pdf = data.pdf_url ? `<a href="${escapeHtml(data.pdf_url)}" target="_blank" rel="noreferrer">Open PDF Report</a>` : "";
-            const urgency = data.clinical && data.clinical.urgency ? data.clinical.urgency : "N/A";
-            const area = data.size_info && data.size_info.area_cm2 ? `${data.size_info.area_cm2} cm2` : data.no_tumor ? "N/A" : "Pending";
-            const diameter = data.size_info && data.size_info.diameter_cm ? `${data.size_info.diameter_cm} cm` : data.no_tumor ? "N/A" : "Pending";
-            state.textContent = "Analysis complete";
-            result.innerHTML = `
-              <div class="metrics">
-                ${metric("Prediction", String(data.label || "").replaceAll("_", " "), data.no_tumor ? "ok" : severityTone)}
-                ${metric("Confidence", confidence)}
-                ${metric("Severity", data.severity || "N/A", severityTone)}
-              </div>
-              <div class="summary">
-                ${kv("Patient", data.patient_name || "-")}
-                ${kv("Patient ID", data.patient_id || "-")}
-                ${kv("Urgency", urgency)}
-                ${kv("Scan Quality", data.quality ? data.quality.quality_score : "N/A")}
-                ${kv("Tumor Area", area)}
-                ${kv("Diameter", diameter)}
-              </div>
-              <div class="actions">
-                ${pdf}
-                <a href="/api/reports" target="_blank" rel="noreferrer">All Reports</a>
-                <a href="/docs" target="_blank" rel="noreferrer">API Docs</a>
-              </div>
-              <div class="report">${escapeHtml(data.report || "No report text returned.")}</div>
-              <details>
-                <summary>Raw JSON</summary>
-                <pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>
-              </details>
-            `;
-          }
-
-          form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            submit.disabled = true;
-            state.textContent = "Running";
-            setStatus("busy", "Running analysis", "Model inference");
-            result.innerHTML = `<div class="empty">Processing MRI scan. Keep this tab open while the API runs the pipeline.</div>`;
+          document.addEventListener("DOMContentLoaded", () => {
             try {
-              const response = await fetch("/api/analyze", { method: "POST", body: new FormData(form) });
-              const data = await response.json();
-              if (!response.ok) {
-                throw new Error(data.detail || "Analysis failed");
+              const form = document.getElementById("scan-form");
+              const result = document.getElementById("result");
+              const statusBox = document.getElementById("status");
+              const state = document.getElementById("result-state");
+              const submit = document.getElementById("submit");
+              const fileInput = document.getElementById("file");
+              let analysisInFlight = false;
+              let previewUrl = "";
+              let previewHtml = "";
+
+              function escapeHtml(value) {
+                const entities = {
+                  "&": "&amp;",
+                  "<": "&lt;",
+                  ">": "&gt;",
+                  '"': "&quot;",
+                  "'": "&#039;"
+                };
+                return String(value ?? "").replace(/[&<>"']/g, (char) => entities[char]);
               }
-              setStatus("ok", "Analysis complete", data.pdf_file || "JSON ready");
-              renderResult(data);
-            } catch (error) {
-              state.textContent = "Error";
-              setStatus("err", "Analysis failed", "Check details");
-              result.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-            } finally {
-              submit.disabled = false;
+
+              function setStatus(kind, text, detail = "") {
+                const cls = kind === "ok" ? "ok" : kind === "busy" ? "busy" : kind === "err" ? "err" : "";
+                statusBox.innerHTML = `<span><i class="dot ${cls}"></i>${escapeHtml(text)}</span><span>${escapeHtml(detail)}</span>`;
+              }
+
+              function metric(label, value, tone = "") {
+                return `<div class="metric ${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+              }
+
+              function kv(label, value) {
+                return `<div class="kv"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "N/A")}</strong></div>`;
+              }
+
+              function formatBytes(bytes) {
+                if (!bytes) {
+                  return "0 KB";
+                }
+                const units = ["B", "KB", "MB", "GB"];
+                const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+                return `${(bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+              }
+
+              function setPreview(file) {
+                if (previewUrl) {
+                  URL.revokeObjectURL(previewUrl);
+                  previewUrl = "";
+                }
+                previewHtml = "";
+                if (!file) {
+                  state.textContent = "No case loaded";
+                  setStatus("", "Waiting for MRI upload", "Max 25 MB");
+                  result.innerHTML = `<div class="empty">Upload an MRI image and run analysis. The selected image preview will appear here.</div>`;
+                  return;
+                }
+                previewUrl = URL.createObjectURL(file);
+                previewHtml = `
+                  <div class="preview">
+                    <img src="${previewUrl}" alt="Uploaded MRI preview">
+                    <div class="preview-meta">
+                      <span>${escapeHtml(file.name)}</span>
+                      <span>${escapeHtml(formatBytes(file.size))}</span>
+                    </div>
+                  </div>
+                `;
+                state.textContent = "Image loaded";
+                setStatus("ok", "Image selected", file.name);
+                result.innerHTML = `${previewHtml}<div class="empty">Image loaded. Click Run Analysis to process this scan.</div>`;
+              }
+
+              function visualsGallery(data) {
+                const visuals = data.visuals || {};
+                const order = [
+                  ["original", "Original MRI"],
+                  ["segmentation", "Segmentation"],
+                  ["gradcam_heatmap", "GradCAM Heatmap"],
+                  ["gradcam_overlay", "GradCAM Overlay"],
+                ];
+                const cells = order.filter(([key]) => visuals[key]).map(([key, label]) => `
+                  <div class="visual-cell">
+                    <img src="${escapeHtml(visuals[key])}" alt="${escapeHtml(label)}">
+                    <span>${escapeHtml(label)}</span>
+                  </div>
+                `).join("");
+                if (!cells) {
+                  return "";
+                }
+                return `<div class="visual-grid">${cells}</div>`;
+              }
+
+              function renderResult(data) {
+                const confidence = typeof data.confidence === "number" ? `${(data.confidence * 100).toFixed(1)}%` : "N/A";
+                const severityTone = data.severity === "Severe" ? "bad" : data.severity === "Moderate" ? "warn" : "ok";
+                const pdf = data.pdf_url ? `<a href="${escapeHtml(data.pdf_url)}" target="_blank" rel="noreferrer">Open PDF Report</a>` : "";
+                const urgency = data.clinical && data.clinical.urgency ? data.clinical.urgency : "N/A";
+                const area = data.size_info && data.size_info.area_cm2 ? `${data.size_info.area_cm2} cm2` : data.no_tumor ? "N/A" : "Pending";
+                const diameter = data.size_info && data.size_info.diameter_cm ? `${data.size_info.diameter_cm} cm` : data.no_tumor ? "N/A" : "Pending";
+                const warnings = Array.isArray(data.warnings) && data.warnings.length
+                  ? `<div class="report">${escapeHtml("Notice: " + data.warnings.join("; "))}</div>`
+                  : "";
+                const gallery = visualsGallery(data);
+                state.textContent = "Analysis complete";
+                result.innerHTML = `
+                  ${previewHtml}
+                  <div class="metrics">
+                    ${metric("Prediction", String(data.label || "").replaceAll("_", " "), data.no_tumor ? "ok" : severityTone)}
+                    ${metric("Confidence", confidence)}
+                    ${metric("Mode", data.mode || "model")}
+                  </div>
+                  <div class="summary">
+                    ${kv("Patient", data.patient_name || "-")}
+                    ${kv("Patient ID", data.patient_id || "-")}
+                    ${kv("Severity", data.severity || "N/A")}
+                    ${kv("Urgency", urgency)}
+                    ${kv("Scan Quality", data.quality ? data.quality.quality_score : "N/A")}
+                    ${kv("Tumor Area", area)}
+                    ${kv("Diameter", diameter)}
+                  </div>
+                  ${gallery}
+                  <div class="actions">
+                    ${pdf}
+                    <a href="/api/reports" target="_blank" rel="noreferrer">All Reports</a>
+                    <a href="/docs" target="_blank" rel="noreferrer">API Docs</a>
+                  </div>
+                  ${warnings}
+                  <div class="report">${escapeHtml(data.report || "No report text returned.")}</div>
+                  <details>
+                    <summary>Raw JSON</summary>
+                    <pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+                  </details>
+                `;
+              }
+
+              async function runAnalysis(event) {
+                event.preventDefault();
+                if (analysisInFlight) {
+                  return;
+                }
+                if (!form.reportValidity()) {
+                  return;
+                }
+                analysisInFlight = true;
+                console.log("Run Analysis clicked; sending POST /api/analyze");
+                submit.disabled = true;
+                state.textContent = "Running";
+                setStatus("busy", "Running analysis", "Model inference");
+                result.innerHTML = `${previewHtml}<div class="empty">Processing MRI scan. Keep this tab open while the API runs the pipeline.</div>`;
+                try {
+                  const response = await fetch("/api/analyze", { method: "POST", body: new FormData(form) });
+                  const data = await response.json();
+                  if (!response.ok) {
+                    throw new Error(data.detail || "Analysis failed");
+                  }
+                  setStatus("ok", "Analysis complete", data.pdf_file || "JSON ready");
+                  renderResult(data);
+                } catch (error) {
+                  state.textContent = "Error";
+                  setStatus("err", "Analysis failed", "Check details");
+                  result.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+                } finally {
+                  analysisInFlight = false;
+                  submit.disabled = false;
+                }
+              }
+
+              window.NeuroScanRunAnalysis = runAnalysis;
+              fileInput.addEventListener("change", () => setPreview(fileInput.files && fileInput.files[0]));
+              form.addEventListener("submit", runAnalysis);
+              submit.addEventListener("click", runAnalysis);
+              console.log("scan-form handler attached OK");
+            } catch (err) {
+              console.error("NeuroScan UI init failed:", err);
+              alert("UI failed to initialize: " + err.message);
             }
           });
         </script>
@@ -442,7 +606,15 @@ def health():
 @app.get("/ready", response_model=ReadinessResponse, tags=["system"])
 def ready():
     missing = _missing_model_files()
-    return {"status": "ready" if not missing else "not_ready", "models_available": not missing, "missing_models": missing}
+    missing_deps = _missing_runtime_dependencies()
+    is_ready = not missing and not missing_deps
+    return {
+        "status": "ready" if is_ready else "not_ready",
+        "models_available": not missing,
+        "missing_models": missing,
+        "dependencies_available": not missing_deps,
+        "missing_dependencies": missing_deps,
+    }
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse, tags=["analysis"])
@@ -473,6 +645,8 @@ async def analyze(
         result = await run_in_threadpool(analyze_mri, image, source_name, tmp_path, patient_name.strip(), patient_id.strip())
         if result.get("pdf_file"):
             result["pdf_url"] = f"/api/reports/{result['pdf_file']}"
+        overlay_files = result.get("overlay_files") or {}
+        result["visuals"] = {key: f"/api/overlays/{name}" for key, name in overlay_files.items()}
         return result
     except HTTPException:
         raise
@@ -506,6 +680,13 @@ def list_reports(limit: int = 100):
 def get_report(filename: str):
     path = _resolve_report(filename)
     return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
+@app.get("/api/overlays/{filename}", tags=["analysis"])
+def get_overlay(filename: str):
+    path = _resolve_overlay(filename)
+    media_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    return FileResponse(path, media_type=media_type, filename=path.name)
 
 
 @app.get("/api/model-info", response_model=ModelInfoResponse, tags=["metadata"])

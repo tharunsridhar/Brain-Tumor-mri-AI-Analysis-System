@@ -12,6 +12,6 @@ services:
       NEUROSCAN_CORS_ORIGINS: "*"
       NEUROSCAN_MAX_UPLOAD_MB: "25"
     volumes:
-      - ../Reports:/app/Reports
-      - ../History:/app/History
-      - ../MODEL:/app/MODEL:ro
+      - ../reports:/app/reports
+      - ../history:/app/history
+      - ../model:/app/model:ro

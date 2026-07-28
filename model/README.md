@@ -6,7 +6,7 @@ Download the required `.keras` model files from Hugging Face:
 
 https://huggingface.co/tharunsridhar/brain_tumor_net-ensemble/tree/main/models
 
-After downloading, place the files in this `MODEL/` folder.
+After downloading, place the files in this `model/` folder.
 
 Expected files:
 

@@ -79,6 +79,30 @@ Groq imaging summary
 PDF report export
 ```
 
+### Step-by-step
+
+1. **Input MRI** — the user uploads a PNG/JPG/JPEG/BMP scan through `/api/analyze` ([app/main.py](app/main.py)). File type and size (default 25 MB max) are validated before anything else runs, so bad input fails fast instead of wasting a model load.
+
+2. **Scan quality validation** — [`core/quality_metrics.py`](core/quality_metrics.py) scores blur, brightness, and contrast into a single `quality_score`. This runs *before* classification because a low-quality scan makes every downstream prediction unreliable; the score is carried forward and factored into the reliability gate later instead of silently trusting every image as diagnostic-grade.
+
+3. **3-model classification** — [`core/classifier_fusion.py`](core/classifier_fusion.py) runs the scan through three independently trained CNNs — EfficientNetV2-S, MobileNetV3, and ConvNeXt Tiny — each predicting `glioma`, `meningioma`, `pituitary`, or `no_tumor`. Three architecturally different backbones are used so that one model's blind spot on a given scan doesn't become the final answer unchallenged.
+
+4. **Adaptive lesion-aware fusion** — also in `core/classifier_fusion.py`, the three predictions are combined with weights based on each model's confidence, entropy-based certainty, the scan's quality score, and a lesion-trust multiplier (derived from tumor size, shape irregularity, and Grad-CAM/segmentation overlap — see step 8). This replaces a naive equal-weight average, since how much to trust each model should depend on the specific scan, not be fixed in advance.
+
+5. **Tumor segmentation** — [`core/segmentation.py`](core/segmentation.py) runs an EfficientNetB4-backed Attention U-Net to produce a binary tumor mask. Classification alone answers *what*; segmentation is required to answer *where* and *how large*, which drives every measurement in the steps that follow.
+
+6. **Grad-CAM heatmap generation** — [`core/gradcam.py`](core/gradcam.py) computes a gradient-based class activation map showing which pixels actually drove the classifier's decision. This is the explainability layer, and it also feeds the consistency check in step 8.
+
+7. **Tumor size + morphology analysis** — [`core/morphology.py`](core/morphology.py) measures area, diameter, volume, irregularity, convexity, eccentricity, laterality, and midline shift directly from the segmentation mask. These are the same quantitative measurements a radiologist would use, so the report gives numbers, not just a class label.
+
+8. **Overlap consistency + DRI gate** — [`core/overlap_metrics.py`](core/overlap_metrics.py) computes IoU between the Grad-CAM attention region and the segmented lesion; [`core/diagnostic_reliability.py`](core/diagnostic_reliability.py) combines that overlap score with scan quality, model agreement, confidence margin, and lesion trust into a Diagnostic Reliability Index (DRI). A high-confidence prediction whose attention isn't actually on the tumor is a real failure mode for CNNs — the DRI turns that risk into an explicit `Accepted` / `Caution` / `Specialist Review Required` decision instead of hiding it behind a single confidence percentage.
+
+9. **Risk and urgency support** — [`core/risk_engine.py`](core/risk_engine.py) turns the morphology, confidence, and DRI data into severity, growth-risk, clinical priority, and concrete next-step recommendations (e.g. "Neurosurgical consultation", "MR Spectroscopy"). This is the step that converts raw numbers into decision-support language.
+
+10. **Groq imaging summary** — [`reporting/llm_report_generator.py`](reporting/llm_report_generator.py) sends the scan and structured findings to a vision-capable LLM (via the Groq API) to draft a radiology-style narrative report. If `GROQ_API_KEY` is missing or the API call fails, the pipeline falls back to a deterministic template so the app still returns a complete report rather than erroring out.
+
+11. **PDF report export** — [`reporting/pdf_report_generator.py`](reporting/pdf_report_generator.py) assembles the original scan, segmentation overlay, Grad-CAM heatmap and overlay, a risk-analytics chart, and the written report into a multi-page PDF saved under `reports/` and downloadable via `/api/reports/{filename}`. The same overlay images are also saved individually under `reports/overlays/` and served via `/api/overlays/{filename}`, so the segmentation and Grad-CAM visuals show up directly in the web UI's result panel, not only inside the PDF.
+
 ## Feature Summary
 
 | Area | Capability |
@@ -111,7 +135,7 @@ Classification targets:
 
 ## Results Gallery
 
-The repository includes visual results in [`docs/`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/docs). For a cleaner project presentation, this README highlights the primary classifier results from EfficientNetV2-S only.
+The repository includes visual results in [`docs/`](docs). For a cleaner project presentation, this README highlights the primary classifier results from EfficientNetV2-S only.
 
 ### Architecture
 
@@ -127,7 +151,7 @@ The repository includes visual results in [`docs/`](/D:/Brain%20Tumor%20Detectio
 ## Repository Structure
 
 ```text
-Code/
+NeuroScan-AI/
 |-- app/           FastAPI interface and workflow orchestration
 |-- core/          fusion, segmentation, explainability, morphology, risk, reliability
 |-- reporting/     LLM report generation and PDF export
@@ -137,7 +161,9 @@ Code/
 |-- tests/         pytest checks
 |-- deploy/        deployment utilities
 |-- docs/          architecture diagram and result images
-|-- sample_data/   repository-local sample assets
+|-- model/         trained .keras weights (downloaded, not committed)
+|-- reports/       generated PDF reports and overlay images (not committed)
+|-- history/       local case history (not committed)
 |-- requirements.txt
 `-- README.md
 ```
@@ -146,14 +172,14 @@ Code/
 
 - [`app/main.py`](app/main.py): FastAPI routes and upload page
 - [`app/pipeline.py`](app/pipeline.py): end-to-end MRI analysis workflow
-- [`core/classifier_fusion.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/core/classifier_fusion.py): multi-model prediction, adaptive fusion, lesion trust
-- [`core/segmentation.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/core/segmentation.py): segmentation inference and mask generation
-- [`core/diagnostic_reliability.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/core/diagnostic_reliability.py): DRI scoring, tiering, and escalation logic
-- [`core/risk_engine.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/core/risk_engine.py): severity, urgency, progression, and decision support
-- [`reporting/llm_report_generator.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/reporting/llm_report_generator.py): Groq-based imaging summary generation
-- [`reporting/pdf_report_generator.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/reporting/pdf_report_generator.py): report visualization and PDF export
-- [`utils/config.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/utils/config.py): paths, constants, and model loading
-- [`utils/history_manager.py`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/utils/history_manager.py): local history persistence and prior-case comparison
+- [`core/classifier_fusion.py`](core/classifier_fusion.py): multi-model prediction, adaptive fusion, lesion trust
+- [`core/segmentation.py`](core/segmentation.py): segmentation inference and mask generation
+- [`core/diagnostic_reliability.py`](core/diagnostic_reliability.py): DRI scoring, tiering, and escalation logic
+- [`core/risk_engine.py`](core/risk_engine.py): severity, urgency, progression, and decision support
+- [`reporting/llm_report_generator.py`](reporting/llm_report_generator.py): Groq-based imaging summary generation
+- [`reporting/pdf_report_generator.py`](reporting/pdf_report_generator.py): report visualization and PDF export
+- [`utils/config.py`](utils/config.py): paths, constants, and model loading
+- [`utils/history_manager.py`](utils/history_manager.py): local history persistence and prior-case comparison
 
 ## Setup
 
@@ -184,50 +210,46 @@ Create `.env` with:
 GROQ_API_KEY=your_key_here
 ```
 
-Use [`.env.example`](/D:/Brain%20Tumor%20Detection%20%26%20Analysis/Code/.env.example) as the safe template. The config also keeps legacy support for `env.txt`, but `.env` is now the standard format.
+Use [`.env.example`](.env.example) as the safe template. The config also keeps legacy support for `env.txt`, but `.env` is now the standard format.
 
 ### 4. Prepare project directories
 
-For full functionality, the project expects these folders in the repository root:
+The app creates `reports/` and `history/` automatically on first run. You only need to prepare `model/` yourself:
 
 ```text
 NeuroScan-AI/
-|-- MODEL/
-|-- Reports/
-|-- History/
-`-- Test Data/
+|-- model/
+|-- reports/     (auto-created)
+`-- history/     (auto-created)
 ```
 
 Folder purposes:
 
-- `MODEL/` stores trained `.keras` weights. Download them from [Hugging Face](https://huggingface.co/tharunsridhar/brain_tumor_net-ensemble/tree/main/models), then place the files in `MODEL/`.
-- `Reports/` stores generated PDF reports
-- `History/` stores saved case history
-- `Test Data/` stores sample MRI images for the app selector
+- `model/` stores trained `.keras` weights. Download them from [Hugging Face](https://huggingface.co/tharunsridhar/brain_tumor_net-ensemble/tree/main/models), then place the files in `model/`.
+- `reports/` stores generated PDF reports and the segmentation/Grad-CAM overlay images shown in the UI
+- `history/` stores saved case history
 
 ### 5. Run the app
 
-```bash
-uvicorn app.main:app --reload
-```
-
-Open <http://127.0.0.1:8000> in your browser.
-
-For the already-created Windows virtual environment, prefer:
+Always launch with the project's `.venv` interpreter, not a system-wide `python`/`uvicorn` — a system interpreter without `opencv-python-headless`, `tensorflow`, and `fpdf2` installed will silently fall back to a heuristic "demo mode" instead of running the real trained models. Check `GET /ready` after startup; `dependencies_available` must be `true`.
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+Open <http://127.0.0.1:8000> in your browser. The first analysis request loads TensorFlow and the three classifier models, so it can take up to a minute; later requests are fast.
 
 ## FastAPI Endpoints
 
 - `GET /health`: service health
-- `GET /ready`: model-file readiness check
-- `POST /api/analyze`: upload MRI image and receive JSON analysis plus PDF URL
+- `GET /ready`: model-file and dependency readiness check
+- `POST /api/analyze`: upload MRI image and receive JSON analysis plus PDF and overlay-image URLs
 - `GET /api/history`: local analyzed-case history
 - `GET /api/reports`: generated PDF report list
 - `GET /api/reports/{filename}`: download one PDF report
+- `GET /api/overlays/{filename}`: fetch one segmentation/Grad-CAM overlay image
 - `GET /api/model-info`: model classes, input sizes, MRI metadata, and model file paths
+- `GET /api/config`: runtime config (upload limits, allowed extensions, storage paths)
 - `GET /docs`: interactive Swagger documentation
 
 ## Deployment

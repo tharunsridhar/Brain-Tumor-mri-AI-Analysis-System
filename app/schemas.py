@@ -19,9 +19,13 @@ class ReadinessResponse(BaseModel):
     status: str
     models_available: bool
     missing_models: list[str] = Field(default_factory=list)
+    dependencies_available: bool = True
+    missing_dependencies: list[str] = Field(default_factory=list)
 
 
 class AnalyzeResponse(BaseModel):
+    mode: str = "model"
+    warnings: list[str] = Field(default_factory=list)
     no_tumor: bool
     label: str
     confidence: float
@@ -33,6 +37,7 @@ class AnalyzeResponse(BaseModel):
     pdf_path: str | None = None
     pdf_file: str | None = None
     pdf_url: str | None = None
+    visuals: dict[str, str] = Field(default_factory=dict)
     quality: dict[str, Any] = Field(default_factory=dict)
     fusion: dict[str, Any] = Field(default_factory=dict)
     model_scores: dict[str, Any] = Field(default_factory=dict)

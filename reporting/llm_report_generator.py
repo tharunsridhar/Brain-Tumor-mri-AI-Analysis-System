@@ -4,11 +4,13 @@ import base64
 
 from groq import Groq
 
+GROQ_TIMEOUT_SECONDS = 20.0
+
 from utils.io_utils import clean_text
 
 def groq_tumor_report(image_path, label, confidence, size_info, shape_info, mass_info, risk_info, severity, rano, groq_api_key, patient_name='') -> str:
     from groq import Groq
-    client = Groq(api_key=groq_api_key)
+    client = Groq(api_key=groq_api_key, timeout=GROQ_TIMEOUT_SECONDS)
     with open(image_path, 'rb') as f:
         img_b64 = base64.b64encode(f.read()).decode()
     bbox_t = f"{size_info['bbox']['width_cm']} x {size_info['bbox']['height_cm']} cm" if size_info.get('bbox') else 'N/A'
@@ -22,7 +24,7 @@ def groq_tumor_report(image_path, label, confidence, size_info, shape_info, mass
 
 def groq_normal_report(image_path, confidence, groq_api_key, patient_name='') -> str:
     from groq import Groq
-    client = Groq(api_key=groq_api_key)
+    client = Groq(api_key=groq_api_key, timeout=GROQ_TIMEOUT_SECONDS)
     with open(image_path, 'rb') as f:
         img_b64 = base64.b64encode(f.read()).decode()
     pt_line = f'\nPatient Name: {patient_name}' if patient_name else ''

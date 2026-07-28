@@ -20,10 +20,10 @@ COPY app ./app
 COPY core ./core
 COPY reporting ./reporting
 COPY utils ./utils
-COPY MODEL ./MODEL
+COPY model ./model
 COPY .env.example ./.env.example
 
-RUN mkdir -p Reports History
+RUN mkdir -p reports history
 
 EXPOSE 8000
 

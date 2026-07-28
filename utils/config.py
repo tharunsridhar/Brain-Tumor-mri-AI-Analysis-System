@@ -9,19 +9,22 @@ warnings.filterwarnings("ignore")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = REPO_ROOT
-MODELS_DIR = Path(os.getenv("NEUROSCAN_MODELS_DIR", PROJECT_ROOT / "MODEL"))
+MODELS_DIR = Path(os.getenv("NEUROSCAN_MODELS_DIR", PROJECT_ROOT / "model"))
 if not MODELS_DIR.exists():
-    legacy_models_dir = PROJECT_ROOT / "Models"
-    if legacy_models_dir.exists():
-        MODELS_DIR = legacy_models_dir
-REPORT_DIR = PROJECT_ROOT / "Reports"
-HISTORY_DIR = PROJECT_ROOT / "History"
+    for legacy_name in ("MODEL", "Models"):
+        legacy_models_dir = PROJECT_ROOT / legacy_name
+        if legacy_models_dir.exists():
+            MODELS_DIR = legacy_models_dir
+            break
+REPORT_DIR = PROJECT_ROOT / "reports"
+OVERLAY_DIR = PROJECT_ROOT / "reports" / "overlays"
+HISTORY_DIR = PROJECT_ROOT / "history"
 HISTORY_FILE = HISTORY_DIR / "case_history.json"
-SAMPLE_DIR = PROJECT_ROOT / "Test Data"
 ENV_FILE = REPO_ROOT / ".env"
 LEGACY_ENV_FILE = REPO_ROOT / "env.txt"
 
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
+OVERLAY_DIR.mkdir(parents=True, exist_ok=True)
 HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
 IMG_SIZE = 384

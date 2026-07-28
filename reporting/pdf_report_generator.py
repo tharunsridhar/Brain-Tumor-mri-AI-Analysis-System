@@ -19,7 +19,7 @@ def build_overlays(orig_bgr: np.ndarray, mask: np.ndarray, heatmap_2d: np.ndarra
         cv2.putText(mask_ov, f"{size_info['diameter_cm']}cm", (b['x'], b['y'] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     hmap_c = cv2.applyColorMap(np.uint8(255 * heatmap_2d), cv2.COLORMAP_JET)
     gcam_ov = cv2.addWeighted(orig_bgr, 0.6, hmap_c, 0.4, 0)
-    return {'mask_ov': mask_ov, 'gcam_ov': gcam_ov, 'hmap_r': heatmap_2d}
+    return {'mask_ov': mask_ov, 'gcam_ov': gcam_ov, 'hmap_r': heatmap_2d, 'hmap_c': hmap_c}
 
 
 def make_risk_chart(size_info, risk_info, shape_info, mass_info) -> str:
